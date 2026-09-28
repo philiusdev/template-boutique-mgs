@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { callAgency } from "@/lib/client";
+import { callAgency } from "@/lib/agency/client";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
