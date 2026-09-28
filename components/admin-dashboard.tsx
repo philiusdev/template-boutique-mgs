@@ -373,6 +373,17 @@ export function AdminDashboard({ email }: { email: string }) {
 
   useEffect(() => {
     if (demoMode) return;
+    void fetch("/api/agency/heartbeat", { method: "POST", cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) console.info("[mgs-agency] Signal de présence non envoyé.");
+      })
+      .catch((error: unknown) => {
+        console.warn("[mgs-agency] Service agence non joignable.", error);
+      });
+  }, [demoMode]);
+
+  useEffect(() => {
+    if (demoMode) return;
     const supabase = createClient();
     const channel = supabase
       .channel("admin-dashboard-live")
