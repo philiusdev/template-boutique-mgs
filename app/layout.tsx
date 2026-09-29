@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "../components/agency.css";
 import { NetworkNotice, SiteHeader } from "@/components/site-shell";
 import { SiteFooter } from "@/components/site-footer";
 import { StoreProvider } from "@/components/store-provider";
