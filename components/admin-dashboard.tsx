@@ -15,9 +15,12 @@ import { BurkinaPhoneInput } from "@/components/burkina-phone-input";
 import { getLookbookFeaturedProduct } from "@/lib/storefront";
 import { isValidBurkinaPhoneNumber, toBurkinaPhoneNumber, toBurkinaPhoneHref, toSavedBurkinaPhoneNumber } from "@/lib/phone";
 import { useStore } from "@/components/store-provider";
+import { AgencyBillingBanner } from "@/components/agency/AgencyBillingBanner";
+import { AgencyPanel } from "@/components/agency/AgencyPanel";
+import type { AgencySpace } from "@/lib/agency/types";
 import { formatCfa, HOME_PRODUCT_LIMIT, ORDER_STATUS_LABELS, type Category, type City, type OrderStatus, type PaymentMethod, type Product, type TransportCompany } from "@/lib/types";
 
-type Tab = "overview" | "orders" | "products" | "delivery" | "payments";
+type Tab = "overview" | "orders" | "products" | "delivery" | "payments" | "agency";
 type AdminOrder = {
   id: string;
   status: OrderStatus;
@@ -181,7 +184,7 @@ function fileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-export function AdminDashboard({ email }: { email: string }) {
+export function AdminDashboard({ email, agencySpace }: { email: string; agencySpace: AgencySpace | null }) {
   const router = useRouter();
   const { demoMode, demoReady, demoState, updateDemoState, logoutDemo, resetDemo, userDisplayName } = useStore();
   const [tab, setTab] = useState<Tab>("overview");
@@ -526,6 +529,7 @@ export function AdminDashboard({ email }: { email: string }) {
     { id: "products", label: "Produits" },
     { id: "delivery", label: "Livraison" },
     { id: "payments", label: "Paiements" },
+    ...(agencySpace ? [{ id: "agency" as const, label: "Mon agence" }] : []),
   ];
 
   return (
@@ -534,6 +538,7 @@ export function AdminDashboard({ email }: { email: string }) {
         <div><p className="eyebrow">ROYAL SHOP · BOUTIQUE</p><h1>Tableau de bord</h1></div>
         <div className="admin-user"><span className="admin-avatar">{getNameMonogram(userDisplayName, email)}</span><span>{userDisplayName || email}</span><button className="text-button" onClick={() => void refreshDashboard()} disabled={refreshing} aria-busy={refreshing}>{refreshing ? "Actualisation…" : "Actualiser"}</button>{demoMode && <button className="text-button" onClick={() => { if (window.confirm("Réinitialiser les produits, commandes et réglages de test ?")) resetDemo(); }}>Réinitialiser les tests</button>}<button className="text-button" onClick={signOut}>Déconnexion</button></div>
       </div>
+      {agencySpace?.billing && <AgencyBillingBanner billing={agencySpace.billing} agency={agencySpace.agency} />}
       <nav className="admin-tabs" aria-label="Sections d'administration">
         {tabs.map((item) => <button key={item.id} aria-current={tab === item.id ? "page" : undefined} onClick={() => { setTab(item.id); setNotice(""); setNoticeType("success"); }} className={tab === item.id ? "active" : ""}>{item.label}</button>)}
       </nav>
@@ -550,6 +555,7 @@ export function AdminDashboard({ email }: { email: string }) {
             <DeliveryPanel data={data} sellerCityValue={sellerCityValue} setSellerCityValue={setSellerCityValue} localFeeValue={localFeeValue} setLocalFeeValue={setLocalFeeValue} shopAddress={shopAddress} setShopAddress={setShopAddress} shopHours={shopHours} setShopHours={setShopHours} shopPhone={shopPhone} setShopPhone={setShopPhone} withNotice={withNotice} />
           )}
           {tab === "payments" && <PaymentsPanel methods={data.methods} withNotice={withNotice} />}
+          {tab === "agency" && agencySpace && <AgencyPanel space={agencySpace} requesterEmail={email} />}
         </>
       )}
       {proofUrl && <div className="modal-backdrop" role="presentation" onClick={() => setProofUrl("")}><div className="proof-modal" role="dialog" aria-modal="true" aria-label="Preuve de paiement" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setProofUrl("")} aria-label="Fermer">×</button><Image src={proofUrl} alt="Capture de paiement" width={1000} height={1200} unoptimized /></div></div>}

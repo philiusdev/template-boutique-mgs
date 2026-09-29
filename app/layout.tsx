@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { NetworkNotice, SiteFooter, SiteHeader } from "@/components/site-shell";
+import { NetworkNotice, SiteHeader } from "@/components/site-shell";
+import { SiteFooter } from "@/components/site-footer";
 import { StoreProvider } from "@/components/store-provider";
 
 export const metadata: Metadata = {

@@ -22,7 +22,7 @@ export function DemoAdminPage() {
     <p>Utilise le bouton « Tester l’administration » en haut de page ou choisis un profil ci-dessous.</p>
     <Link className="button button-dark" href="/connexion?next=/admin">Choisir un profil de démo <span>→</span></Link>
   </main>;
-  return <AdminDashboard email={userEmail ?? "admin@atelier-naya.demo"} />;
+  return <AdminDashboard email={userEmail ?? "admin@atelier-naya.demo"} agencySpace={null} />;
 }
 
 export function DemoProductDetail({ slug }: { slug: string }) {

@@ -1093,3 +1093,192 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .streetwear-site .order-updates { align-items: flex-start; flex-direction: column; gap: 4px; }
   .streetwear-site .install-app-card { bottom: calc(14px + env(safe-area-inset-bottom)); }
 }
+
+/* ══ Connecteur MindGraphixSolution ══ voir mgs-agency-connector/agency.css */
+/* Charte « Mon agence » de MindGraphixSolution.
+ *
+ * Bloc volontairement autonome : à copier dans le globals.css du site client.
+ * L'accent --mgs-* est celui de l'agence, volontairement différent de la
+ * couleur de la boutique, pour que le commerçant distingue d'un coup d'œil ce
+ * qui vient de lui et ce qui vient de son site.
+ *
+ * Toutes les règles utilisent des variables avec valeur de repli : si le site
+ * client ne définit pas --mgs-*, l'apparence reste correcte.
+ */
+
+:root {
+  --mgs-ink: #17323f;
+  --mgs-accent: #0f6f78;
+  --mgs-accent-soft: #e6f2f3;
+  --mgs-line: #d5e4e5;
+  --mgs-muted: #5b6b70;
+  --mgs-radius: 14px;
+}
+
+/* ---- 1. Crédit public dans le pied de page ------------------------------- */
+
+.agency-credit {
+  margin: 0;
+  padding: 10px 0 2px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--muted, #73776e);
+}
+
+.agency-credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.agency-credit a:hover { text-decoration: none; }
+
+@media (max-width: 760px) {
+  .agency-credit { font-size: 0.75rem; }
+}
+
+/* ---- 2. Bandeau de facturation en haut du dashboard ---------------------- */
+
+.agency-banners { display: grid; gap: 8px; margin-bottom: 16px; }
+
+.agency-subscription {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--mgs-line);
+  border-radius: 999px;
+  background: var(--mgs-accent-soft);
+  color: var(--mgs-ink);
+  font-size: 0.85rem;
+}
+
+.agency-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--mgs-line);
+  border-radius: var(--mgs-radius);
+  background: #fff;
+  color: var(--mgs-ink);
+  font-size: 0.92rem;
+}
+
+.agency-banner-warning { border-color: #f0c98a; background: #fff6e6; }
+.agency-banner-info { background: var(--mgs-accent-soft); }
+.agency-banner-ok { margin: 0; color: #1f6b3a; font-size: 0.85rem; }
+
+.agency-banner-action {
+  margin-left: auto;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--mgs-accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* ---- 3. Onglet « Mon agence » --------------------------------------------- */
+
+.agency-panel { display: grid; gap: 18px; }
+
+.agency-section {
+  padding: 20px;
+  border: 1px solid var(--mgs-line);
+  border-left: 4px solid var(--mgs-accent);
+  border-radius: var(--mgs-radius);
+  background: #fff;
+}
+
+.agency-section-title {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  color: var(--mgs-ink);
+}
+
+.agency-section-lead { margin: 0 0 14px; color: var(--mgs-muted); font-size: 0.9rem; }
+
+/* a) Coordonnées de l'agence */
+
+.agency-contact { display: grid; gap: 10px; }
+
+.agency-contact-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--mgs-line);
+  border-radius: var(--mgs-radius);
+  background: var(--mgs-accent-soft);
+  color: var(--mgs-ink);
+}
+
+.agency-contact-card small { display: block; color: var(--mgs-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: .04em; }
+.agency-contact-card strong { font-size: 1rem; word-break: break-word; }
+.agency-contact-icon { font-size: 1.4rem; line-height: 1; }
+
+/* b) Annonces */
+
+.agency-list { display: grid; gap: 10px; }
+
+.agency-card {
+  padding: 14px 16px;
+  border: 1px solid var(--mgs-line);
+  border-radius: var(--mgs-radius);
+  background: #fff;
+}
+
+.agency-card h3 { margin: 0 0 6px; font-size: 0.98rem; color: var(--mgs-ink); }
+.agency-card p { margin: 0; color: var(--mgs-muted); font-size: 0.9rem; }
+.agency-card small { display: block; margin-top: 8px; color: var(--mgs-muted); font-size: 0.78rem; }
+.agency-card-warning { border-left: 4px solid #d9a441; }
+.agency-card-critical { border-left: 4px solid #c2503f; }
+
+/* c) Demander une amélioration */
+
+.agency-form { display: grid; gap: 8px; }
+.agency-form label { font-weight: 600; font-size: 0.92rem; color: var(--mgs-ink); }
+
+.agency-form textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 10px 12px;
+  border: 1px solid var(--mgs-line);
+  border-radius: 10px;
+  resize: vertical;
+  font: inherit;
+}
+
+.agency-button {
+  justify-self: start;
+  min-height: 42px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--mgs-accent);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.agency-button:disabled { opacity: .55; cursor: not-allowed; }
+.agency-button-secondary { margin-top: 12px; display: inline-block; font-size: 0.85rem; }
+
+.agency-feedback-ok,
+.agency-feedback-error { margin: 0; padding: 12px 14px; border-radius: var(--mgs-radius); font-size: 0.9rem; }
+.agency-feedback-ok { background: #e8f4e9; color: #2b6637; }
+.agency-feedback-error { background: #fdeceb; color: #8c2f22; }
+
+/* d) Nos autres services */
+
+.agency-offers { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+.agency-offer { display: flex; flex-direction: column; }
+.agency-offer p { flex: 1; }
+
+@media (max-width: 760px) {
+  .agency-section { padding: 16px; }
+  .agency-banner-action { margin-left: 0; }
+}
