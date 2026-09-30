@@ -17,7 +17,7 @@ import { isValidBurkinaPhoneNumber, toBurkinaPhoneNumber, toBurkinaPhoneHref, to
 import { useStore } from "@/components/store-provider";
 import { AgencyBillingBanner } from "@/components/agency/AgencyBillingBanner";
 import { AgencyPanel } from "@/components/agency/AgencyPanel";
-import type { AgencySpace } from "@/lib/agency/types";
+import type { AgencySpace, IdentiteAgence } from "@/lib/agency/types";
 import { formatCfa, HOME_PRODUCT_LIMIT, ORDER_STATUS_LABELS, type Category, type City, type OrderStatus, type PaymentMethod, type Product, type TransportCompany } from "@/lib/types";
 
 type Tab = "overview" | "orders" | "products" | "delivery" | "payments" | "agency";
@@ -182,6 +182,31 @@ function fileAsDataUrl(file: File): Promise<string> {
     };
     reader.readAsDataURL(file);
   });
+}
+
+/**
+ * Lien de repli du bandeau de facturation, quand le portail en ligne est fermé.
+ *
+ * Le bandeau n'affiche « Voir et payer » que si la plateforme l'autorise ET
+ * fournit une vraie URL ; sinon il se rabat sur ce lien. On le prend dans
+ * l'identité que le CONTRAT a déjà construite et validée (`lien_whatsapp`,
+ * `lien_email`) plutôt que de recomposer un lien ici : un lien reconstruit dans
+ * le site pourrait pointer ailleurs que ce que l'écran affiche, et le
+ * commerçant appellerait alors un numéro qui n'est pas celui de son agence.
+ *
+ * WhatsApp d'abord : c'est le canal que l'agence publie en priorité, et un
+ * contact qui aboutit vaut mieux qu'une adresse que personne ne lit. La
+ * reconstruction du lien à partir du numéro brut est INTERDITE ici, pour la même
+ * raison — d'où le choix de lire `lien_whatsapp` et non `whatsapp`.
+ *
+ * Aucune coordonnée, aucune chaîne vide : le bandeau n'affiche alors rien plutôt
+ * qu'un lien vide, et `null` est la seule valeur qui le dise honnêtement.
+ */
+function lienContactAgence(identite: IdentiteAgence | null | undefined): string | null {
+  const whatsapp = identite?.lien_whatsapp;
+  if (typeof whatsapp === "string" && whatsapp !== "") return whatsapp;
+  const courriel = identite?.lien_email;
+  return typeof courriel === "string" && courriel !== "" ? courriel : null;
 }
 
 export function AdminDashboard({ email, agencySpace }: { email: string; agencySpace: AgencySpace | null }) {
@@ -538,7 +563,7 @@ export function AdminDashboard({ email, agencySpace }: { email: string; agencySp
         <div><p className="eyebrow">ROYAL SHOP · BOUTIQUE</p><h1>Tableau de bord</h1></div>
         <div className="admin-user"><span className="admin-avatar">{getNameMonogram(userDisplayName, email)}</span><span>{userDisplayName || email}</span><button className="text-button" onClick={() => void refreshDashboard()} disabled={refreshing} aria-busy={refreshing}>{refreshing ? "Actualisation…" : "Actualiser"}</button>{demoMode && <button className="text-button" onClick={() => { if (window.confirm("Réinitialiser les produits, commandes et réglages de test ?")) resetDemo(); }}>Réinitialiser les tests</button>}<button className="text-button" onClick={signOut}>Déconnexion</button></div>
       </div>
-      {agencySpace?.billing && <AgencyBillingBanner billing={agencySpace.billing} agency={agencySpace.agency} />}
+      {agencySpace?.facturation && <AgencyBillingBanner billing={agencySpace.facturation} lienContact={lienContactAgence(agencySpace.identite)} />}
       <nav className="admin-tabs" aria-label="Sections d'administration">
         {tabs.map((item) => <button key={item.id} aria-current={tab === item.id ? "page" : undefined} onClick={() => { setTab(item.id); setNotice(""); setNoticeType("success"); }} className={tab === item.id ? "active" : ""}>{item.label}</button>)}
       </nav>
@@ -555,7 +580,7 @@ export function AdminDashboard({ email, agencySpace }: { email: string; agencySp
             <DeliveryPanel data={data} sellerCityValue={sellerCityValue} setSellerCityValue={setSellerCityValue} localFeeValue={localFeeValue} setLocalFeeValue={setLocalFeeValue} shopAddress={shopAddress} setShopAddress={setShopAddress} shopHours={shopHours} setShopHours={setShopHours} shopPhone={shopPhone} setShopPhone={setShopPhone} withNotice={withNotice} />
           )}
           {tab === "payments" && <PaymentsPanel methods={data.methods} withNotice={withNotice} />}
-          {tab === "agency" && agencySpace && <AgencyPanel space={agencySpace} requesterEmail={email} />}
+          {tab === "agency" && agencySpace && <AgencyPanel space={agencySpace} requesterEmail={email} routeRevalidation="/api/agency/revalidate" cheminRevalidation="/admin" />}
         </>
       )}
       {proofUrl && <div className="modal-backdrop" role="presentation" onClick={() => setProofUrl("")}><div className="proof-modal" role="dialog" aria-modal="true" aria-label="Preuve de paiement" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setProofUrl("")} aria-label="Fermer">×</button><Image src={proofUrl} alt="Capture de paiement" width={1000} height={1200} unoptimized /></div></div>}
