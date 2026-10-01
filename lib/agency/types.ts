@@ -9,9 +9,8 @@
 //     de la plateforme. On le RÉ-EXPORTE au lieu de le redéclarer : redéclarer
 //     un type, c'est garantir qu'il divergera un jour.
 //  2. Ce qui n'est PAS dans le contrat est déclaré ici, et nommé comme tel : les
-//     annonces et la facturation. La plateforme n'a jamais fait passer ces deux
-//     lectures par le contrat ; elles n'ont donc aucune forme officielle à
-//     recopier, et il vaut mieux le dire que le deviner.
+//     annonces et les formes normalisées des factures. Les formes réseau de
+//     facturation viennent du contrat partagé.
 //
 // Ce fichier ne lit aucune variable d'environnement : il peut être importé
 // côté serveur comme côté navigateur sans exposer une clé. La lecture est dans
@@ -23,29 +22,11 @@
 
 import type {
   AbonnementAffiche,
-  ActeurAffiche,
-  BoutonFlottantAffiche,
-  CodePeriodeFacturation,
-  CodeStatutAbonnement,
-  CodeStatutDemande,
-  CodeTypeActeur,
-  CodeTypeEvenement,
-  ContexteBoutonFlottant,
   DemandeAffiche,
-  EtatPrix,
-  EvenementAffiche,
+  ForfaitFacturationPublic,
   IdentiteAgence,
-  NiveauUrgenceBouton,
   OffreAffiche,
-  PaiementAffiche,
-  PositionBouton,
   PrestationAffiche,
-  PrixAffiche,
-  ReponseAbonnement,
-  ReponseAgence,
-  ReponseCreationDemande,
-  ReponseDemandes,
-  ReponsePrestations,
 } from "./contrat-partage";
 
 /* -------------------------------------------------------------------------- *
@@ -65,6 +46,13 @@ export type {
   DemandeAffiche,
   EtatPrix,
   EvenementAffiche,
+  ForfaitFacturationPublic,
+  FactureImpayeePublique,
+  AbonnementFacturationPublic,
+  ReponseFacturationPublique,
+  FactureSouscriptionPublique,
+  ReponseSouscriptionPublique,
+  ReponsePaiementPublic,
   IdentiteAgence,
   NiveauUrgenceBouton,
   OffreAffiche,
@@ -112,6 +100,9 @@ export type ReponseAnnoncesBrut = unknown;
 /** Réponse de `GET /api/v1/billing`. */
 export type ReponseFacturationBrut = {
   site_name?: unknown;
+  subscription?: unknown;
+  plans?: unknown;
+  plans_truncated?: unknown;
   unpaid_invoices?: unknown;
   portal_url?: unknown;
   can_pay_online?: unknown;
@@ -151,16 +142,14 @@ export type AgencyAnnouncement = {
 };
 
 /* -------------------------------------------------------------------------- *
- * Ce que le contrat ne définit pas : la facturation.
+ * Facturation : formes publiques réseau ré-exportées ci-dessus; les types
+ * `Agency*` ci-dessous sont des vues normalisées pour l'interface locale.
  *
- * `/api/v1/billing` n'est PAS sérialisé par le contrat. Son `subscription`
- * est redondant, et son `domain` n'apparait que dans la branche degradee de la
- * route, ou il vaut toujours `null` : aucune migration ne porte de colonne
- * d'expiration de domaine. On ne copie NI l'un NI l'autre — l'abonnement est
- * deja dans `AgencySpace.abonnement`, produit par le contrat via
- * `construireReponseAbonnement`. Reconstruire ici une etiquette d'abonnement,
- * ou un bandeau de renouvellement de domaine, serait exactement la
- * duplication que le contrat interdit.
+ * `/api/v1/billing` n'est PAS sérialisé par le contrat. La formule affichée
+ * reste `AgencySpace.abonnement`, produite par le contrat partagé. La lecture
+ * `subscription` sert seulement à empêcher une seconde souscription; elle n'est
+ * pas rendue comme un état. Aucun domaine n'est affiché : la route renvoie
+ * `domain: null` faute de date d'expiration stockée.
  * -------------------------------------------------------------------------- */
 
 /**
@@ -189,10 +178,10 @@ export type AgencyInvoice = {
 /**
  * Situation de facturation d'un espace, hors abonnement (voir `AgencySpace`).
  *
- * Les noms de champs reprennent ceux de `GET /api/v1/billing` un à un, à une
- * exception : `subscription` a disparu, et `portal_url` n'est conservé que s'il
- * est une vraie URL http(s). Un endpoint hors contrat se lit d'autant mieux
- * qu'il se compare ligne à ligne avec sa route.
+ * Les champs de facturation hors contrat sont normalisés ici; montants et dates
+ * restent ceux de l'API. `portal_url` est conservé seulement pour les anciennes
+ * intégrations; le paiement passe par une route serveur locale qui relaie
+ * `payment_endpoint`.
  *
  * `billing_available` est le seul signal qui distingue « cet espace n'a pas de
  * facturation » — la route répond alors un 200 complet avec
@@ -201,6 +190,12 @@ export type AgencyInvoice = {
  */
 export type AgencyBilling = {
   site_name: string | null;
+  /** Repris uniquement pour savoir si une nouvelle formule est sélectionnable. */
+  subscription: AgencyBillingSubscription | null;
+  plans: AgencyBillingPlan[];
+  /** `false` si la réponse provient d'une ancienne version sans catalogue. */
+  plans_disponibles: boolean;
+  plans_truncated: boolean;
   unpaid_invoices: AgencyInvoice[];
   portal_url: string | null;
   can_pay_online: boolean;
@@ -208,6 +203,20 @@ export type AgencyBilling = {
   payment_endpoint: string | null;
   billing_available: boolean;
   billing_message: string | null;
+};
+
+/** Forfait renvoyé par la plateforme, validé puis affiché tel quel. */
+export type AgencyBillingPlan = ForfaitFacturationPublic;
+
+/** Abonnement retourné par la facturation; l'affichage reste celui du contrat agence. */
+export type AgencyBillingSubscription = {
+  id: string;
+  status: string;
+  provider: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  plan: AgencyBillingPlan | null;
 };
 
 /* -------------------------------------------------------------------------- *

@@ -40,6 +40,8 @@ import type {
   AgencyAnnouncement,
   AgencyAnnouncementSeverity,
   AgencyBilling,
+  AgencyBillingPlan,
+  AgencyBillingSubscription,
   AgencyInvoice,
   AgencySpace,
   BoutonFlottantAffiche,
@@ -102,6 +104,7 @@ const MAX_PRESTATIONS = 60;
 const MAX_DEMANDES = 50;
 const MAX_EVENEMENTS = 100;
 const MAX_FACTURES = 20;
+const MAX_FORFAITS = 50;
 
 /** Statuts de facture que la plateforme sélectionne elle-même. */
 const STATUTS_FACTURE = ["open", "uncollectible"];
@@ -520,9 +523,17 @@ function normaliserGravite(brut: unknown): AgencyAnnouncementSeverity {
 
 function normaliserFacturation(brut: ReponseFacturationBrut | null): AgencyBilling | null {
   const record = commeObjet(brut);
-  if (!record) return null;
+  if (
+    !record
+    || typeof record.billing_available !== "boolean"
+    || !Array.isArray(record.unpaid_invoices)
+  ) return null;
   return {
     site_name: texteCourt(record.site_name, 160) || null,
+    subscription: normaliserAbonnementFacturation(record.subscription),
+    plans: normaliserForfaits(record.plans),
+    plans_disponibles: Array.isArray(record.plans),
+    plans_truncated: record.plans_truncated === true,
     unpaid_invoices: normaliserFactures(record.unpaid_invoices),
     portal_url: formaterSiteWeb(typeof record.portal_url === "string" ? record.portal_url : null),
     can_pay_online: record.can_pay_online === true,
@@ -530,6 +541,56 @@ function normaliserFacturation(brut: ReponseFacturationBrut | null): AgencyBilli
     billing_available: record.billing_available === true,
     billing_message: texteCourt(record.billing_message, 300) || null,
   };
+}
+
+/** Le catalogue vient de la facturation; aucune valeur reçue ne part directement à l'écran. */
+function normaliserForfaits(brut: unknown): AgencyBillingPlan[] {
+  return commeListe(brut)
+    .map((item) => {
+      const record = commeObjet(item);
+      const id = texteCourt(record?.id, 64);
+      const nom = texteCourt(record?.name, 120);
+      const montant = centimes(record?.price_cents);
+      const periode = record?.billing_interval;
+      if (!id || !nom || montant === null || (periode !== "month" && periode !== "year")) return null;
+      return {
+        id,
+        code: texteCourt(record?.code, 64),
+        name: nom,
+        description: texteLong(record?.description, 800),
+        price_cents: montant,
+        currency: normaliserDevise(typeof record?.currency === "string" ? record.currency : null),
+        billing_interval: periode,
+        features: commeListe(record?.features)
+          .map((feature) => texteCourt(feature, 160))
+          .filter(Boolean)
+          .slice(0, 20),
+        trial_days: entier(record?.trial_days, 0, 365) ?? 0,
+      } satisfies AgencyBillingPlan;
+    })
+    .filter((plan): plan is AgencyBillingPlan => plan !== null)
+    .slice(0, MAX_FORFAITS);
+}
+
+function normaliserAbonnementFacturation(brut: unknown): AgencyBillingSubscription | null {
+  const record = commeObjet(brut);
+  if (!record) return null;
+  const id = texteCourt(record.id, 64);
+  const statut = texteCourt(record.status, 32);
+  if (!id || !statut) return null;
+  return {
+    id,
+    status: statut,
+    provider: texteCourt(record.provider, 32) || null,
+    current_period_start: instantIso(record.current_period_start),
+    current_period_end: instantIso(record.current_period_end),
+    cancel_at_period_end: record.cancel_at_period_end === true,
+    plan: normaliserPlanFacturation(record.plan),
+  };
+}
+
+function normaliserPlanFacturation(brut: unknown): AgencyBillingPlan | null {
+  return normaliserForfaits(brut ? [brut] : [])[0] ?? null;
 }
 
 /**
