@@ -563,7 +563,16 @@ export function AdminDashboard({ email, agencySpace }: { email: string; agencySp
         <div><p className="eyebrow">ROYAL SHOP · BOUTIQUE</p><h1>Tableau de bord</h1></div>
         <div className="admin-user"><span className="admin-avatar">{getNameMonogram(userDisplayName, email)}</span><span>{userDisplayName || email}</span><button className="text-button" onClick={() => void refreshDashboard()} disabled={refreshing} aria-busy={refreshing}>{refreshing ? "Actualisation…" : "Actualiser"}</button>{demoMode && <button className="text-button" onClick={() => { if (window.confirm("Réinitialiser les produits, commandes et réglages de test ?")) resetDemo(); }}>Réinitialiser les tests</button>}<button className="text-button" onClick={signOut}>Déconnexion</button></div>
       </div>
-      {agencySpace?.facturation && <AgencyBillingBanner billing={agencySpace.facturation} lienContact={lienContactAgence(agencySpace.identite)} />}
+      {agencySpace && (
+        <AgencyBillingBanner
+          billing={agencySpace.facturation}
+          lienContact={lienContactAgence(agencySpace.identite)}
+          indisponible={
+            Array.isArray(agencySpace.indisponibles)
+            && agencySpace.indisponibles.indexOf("facturation" as never) >= 0
+          }
+        />
+      )}
       <nav className="admin-tabs" aria-label="Sections d'administration">
         {tabs.map((item) => <button key={item.id} aria-current={tab === item.id ? "page" : undefined} onClick={() => { setTab(item.id); setNotice(""); setNoticeType("success"); }} className={tab === item.id ? "active" : ""}>{item.label}</button>)}
       </nav>

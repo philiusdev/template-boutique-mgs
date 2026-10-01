@@ -1,9 +1,17 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 
 import { FormulaireNouvelleDemande } from "./agency-formulaire";
 import { ListeDemandes } from "./agency-demandes";
+import { AgencyForfaits } from "./AgencyForfaits";
+import { AgencyInvoicePayment } from "./AgencyInvoicePayment";
+import {
+  abonnerTracePaiementOuvert,
+  lireTracePaiementOuvert,
+  snapshotPaiementOuvertServeur,
+} from "./agency-paiement-client";
 import {
   Mention,
   PastillePrix,
@@ -12,7 +20,9 @@ import {
 } from "./agency-commun";
 import {
   LIBELLE_ABONNEMENT_AUCUN,
+  LIBELLE_FORMULE_INCONNUE,
   LIBELLE_PRIX_INCLUS,
+  decrireStatutAbonnement,
   formaterDate,
 } from "@/lib/agency/contrat-partage";
 import type {
@@ -20,6 +30,7 @@ import type {
   AgencyAnnouncement,
   AgencyBilling,
   AgencyInvoice,
+  AgencyBillingSubscription,
   IdentiteAgence,
   OffreAffiche,
   PrestationAffiche,
@@ -130,10 +141,22 @@ export function AgencyPanel({
         joignable={space.joignable !== false}
         suffixe={suffixe}
       />
-      <SectionAbonnement abonnement={space.abonnement} suffixe={suffixe} />
+      <SectionAbonnement
+        abonnement={space.abonnement}
+        abonnementFacturation={space.facturation?.subscription ?? null}
+        lienContact={identite?.lien_whatsapp ?? identite?.lien_email ?? null}
+        suffixe={suffixe}
+      />
       <SectionFacturation
         facturation={space.facturation}
+        indisponible={indisponible("facturation")}
         identite={identite}
+        suffixe={suffixe}
+      />
+      <AgencyForfaits
+        facturation={space.facturation}
+        indisponible={indisponible("facturation")}
+        lienContact={identite?.lien_whatsapp ?? identite?.lien_email ?? null}
         suffixe={suffixe}
       />
       <SectionPrestations
@@ -319,17 +342,29 @@ function SectionIdentite({
  */
 function SectionAbonnement({
   abonnement,
+  abonnementFacturation,
+  lienContact,
   suffixe,
 }: {
   abonnement: AbonnementAffiche | null | undefined;
+  abonnementFacturation: AgencyBillingSubscription | null;
+  lienContact: string | null;
   /** Préfixe d'identifiant du panneau. Voir `AgencyPanel`. */
   suffixe: string;
 }) {
   if (!abonnement) return null;
 
-  const statut = typeof abonnement.statut === "string" ? abonnement.statut : "inconnu";
+  const statut = abonnementFacturation?.status
+    ?? (typeof abonnement.statut === "string" ? abonnement.statut : "inconnu");
   const aucun = statut === "aucun";
   const inconnu = statut === "inconnu";
+  const resilie = abonnement.resilie || statut === "canceled";
+  const seRenouvelle = abonnementFacturation
+    ? !abonnementFacturation.cancel_at_period_end
+    : abonnement.se_renouvelle;
+  const statutLibelle = abonnementFacturation
+    ? decrireStatutAbonnement(statut)
+    : abonnement.statut_libelle;
   const caract = Array.isArray(abonnement.caracteristiques) ? abonnement.caracteristiques : [];
   const jours = typeof abonnement.jours_restants === "number" ? abonnement.jours_restants : null;
 
@@ -352,10 +387,10 @@ function SectionAbonnement({
             <h3 className="agency-encart-titre">
               {typeof abonnement.formule === "string" && abonnement.formule !== ""
                 ? abonnement.formule
-                : "Formule"}
+                : LIBELLE_FORMULE_INCONNUE}
             </h3>
             <PastilleStatut
-              libelle={abonnement.statut_libelle}
+              libelle={statutLibelle}
               jeton={jetonAbonnement(statut)}
             />
           </div>
@@ -376,7 +411,7 @@ function SectionAbonnement({
             {abonnement.fin_libelle && (
               <div className="agency-ligne">
                 <dt className="agency-ligne-libelle">
-                  {abonnement.resilie ? "Fin" : "Prochaine échéance"}
+                  {resilie ? "Fin" : "Prochaine échéance"}
                 </dt>
                 <dd className="agency-ligne-valeur">
                   <time dateTime={abonnement.periode_fin ?? undefined}>
@@ -385,7 +420,7 @@ function SectionAbonnement({
                 </dd>
               </div>
             )}
-            {abonnement.se_renouvelle === false && !abonnement.resilie && (
+            {seRenouvelle === false && !resilie && (
               <div className="agency-ligne">
                 <dt className="agency-ligne-libelle">Renouvellement</dt>
                 <dd className="agency-ligne-valeur">Ne se renouvelle pas</dd>
@@ -393,7 +428,7 @@ function SectionAbonnement({
             )}
           </dl>
 
-          {jours !== null && !abonnement.resilie && abonnement.se_renouvelle === true && (
+          {jours !== null && !resilie && seRenouvelle === true && (
             <p className="agency-compteur">
               {jours > 1 ? `Il reste ${jours} jours.` : "Il reste un jour."}
             </p>
@@ -416,6 +451,12 @@ function SectionAbonnement({
             <Mention ton="attention">
               L’état de cet abonnement est en cours de vérification par l’agence.
             </Mention>
+          )}
+          {!resilie && (
+            <p className="agency-section-intro">
+              Les changements de forfait et les résiliations se font auprès de l’agence.
+              {lienContact && <> <a className="agency-ancre" href={lienContact}>La contacter</a>.</>}
+            </p>
           )}
         </>
       )}
@@ -447,18 +488,59 @@ function SectionAbonnement({
  * complète que la plateforme fait quand cet espace n'a pas de facturation. Le
  * panneau le dit, et propose le contact direct — pas un écran vide, pas une
  * icône cassée.
+ *
+ * L'ÉCRAN NE DISPARAÎT PAS QUAND LE COMMERCÉANT VIENT DE PAYER
+ * ----------------------------------------------------------
+ * Une section qui ne rend rien quand il n'y a aucune facture impayée est
+ * correcte au repos. Elle est fausse au retour du prestataire : le
+ * commerçant vient d'ouvrir un règlement, la plateforme ne l'a pas encore
+ * constaté, la facture est donc encore listée — et si elle ne l'est plus, la
+ * section a disparu, et lui ne sait pas si c'est bon signe ou une panne.
+ *
+ * D'où `paiementOuvert` : la trace laissée par `AgencyInvoicePayment` avant de
+ * quitter la page. Elle ne prétend JAMAIS que le paiement aboutira — « en cours
+ * de vérification » est la seule formulation honnête, puisque seul le
+ * prestataire peut confirmer. Elle rend la section même sans facture, et propose
+ * de relire l'espace : c'est ce bouton qui casse la boucle « j'ai payé, je vois
+ * encore la facture, je paie encore ».
  */
 function SectionFacturation({
   facturation,
+  indisponible,
   identite,
   suffixe,
 }: {
   facturation: AgencyBilling | null | undefined;
+  indisponible: boolean;
   identite: IdentiteAgence | null;
   /** Préfixe d'identifiant du panneau. Voir `AgencyPanel`. */
   suffixe: string;
 }) {
-  if (!facturation || typeof facturation !== "object") return null;
+  // La trace d'un règlement vient du NAVIGATEUR (`sessionStorage` et l'adresse
+  // de retour), donc d'un état externe : `useSyncExternalStore` la lit sans effet
+  // ni état local, et l'affiche seulement après l'hydratation. Voir
+  // `agency-paiement-client.ts`.
+  const paiementOuvert = useSyncExternalStore(
+    abonnerTracePaiementOuvert,
+    lireTracePaiementOuvert,
+    snapshotPaiementOuvertServeur,
+  );
+  const [relance, setRelance] = useState(false);
+  const router = useRouter();
+
+
+  if (!facturation || typeof facturation !== "object") {
+    if (!indisponible) return null;
+    const idTitre = "agency-titre-facturation-" + suffixe;
+    return (
+      <section className="agency-section" aria-labelledby={idTitre}>
+        <h2 className="agency-section-titre" id={idTitre}>Facturation</h2>
+        <Mention ton="attention">
+          La facturation n’a pas pu être consultée. Réessayez dans un instant.
+        </Mention>
+      </section>
+    );
+  }
 
   if (facturation.billing_available !== true) {
     return (
@@ -478,69 +560,80 @@ function SectionFacturation({
   const factures = Array.isArray(facturation.unpaid_invoices)
     ? facturation.unpaid_invoices.filter(Boolean)
     : [];
-  if (factures.length === 0) return null;
+  if (factures.length === 0 && paiementOuvert === null) return null;
 
-  // Le bouton de paiement n'apparaît que si la plateforme autorise le paiement
-  // en ligne ET fournit une vraie URL. Un lien vers un portail alors que le
-  // paiement en ligne est désactivé enverrait le commerçant dans un cul-de-sac
-  // et le ferait conclure à une panne.
-  const portal = typeof facturation.portal_url === "string" ? facturation.portal_url : null;
-  const payable = facturation.can_pay_online === true && portal !== null;
+  /**
+   * Relire l'espace sans changer de page.
+   *
+   * `router.refresh()` suffit : la route locale de paiement a purgé l'étiquette
+   * de cache de l'agence juste avant de répondre, donc le rechargement relit
+   * `/api/v1/billing` au lieu de resservir l'état d'avant paiement. C'est
+   * exactement ce qu'il faut ici, et c'est pour ça que la purge compte.
+   */
+  async function verifierLeStatut() {
+    setRelance(true);
+    try {
+      await router.refresh();
+    } finally {
+      setRelance(false);
+    }
+  }
 
   return (
     <section className="agency-section" aria-labelledby={`agency-titre-facturation-${suffixe}`}>
       <h2 className="agency-section-titre" id={`agency-titre-facturation-${suffixe}`}>
         Facturation
       </h2>
-      <p className="agency-section-intro">
-        {factures.length === 1
-          ? "1 facture en attente."
-          : `${factures.length} factures en attente.`}
-      </p>
 
-      <ul className="agency-factures">
-        {factures.map((facture) => (
-          <CarteFacture key={facture.id} facture={facture} />
-        ))}
-      </ul>
-
-      {payable ? (
-        <a
-          className="agency-bouton agency-bouton--plein"
-          href={portal ?? undefined}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Voir et payer
-        </a>
-      ) : (
-        <p className="agency-section-intro">
-          Le paiement en ligne n’est pas disponible pour cette facture. Écrivez à
-          l’agence
-          {identite?.lien_whatsapp ? (
-            <>
-              {" "}
-              <a
-                className="agency-ancre"
-                href={identite.lien_whatsapp}
-                target="_blank"
-                rel="noopener noreferrer"
+      {paiementOuvert !== null && (
+        <div className="agency-forfait-retour" role="status" aria-live="polite">
+          <p className="agency-forfait-retour-texte">
+            Vous avez ouvert le paiement de la facture {paiementOuvert} chez le prestataire.
+            Son statut est en cours de vérification : la facture ne sera marquée réglée
+            qu’après la confirmation du prestataire.
+          </p>
+          {factures.length > 0 ? (
+            <div>
+              <button
+                className="agency-bouton agency-bouton--secondaire agency-paiement-bouton"
+                type="button"
+                onClick={() => void verifierLeStatut()}
+                disabled={relance}
+                aria-busy={relance}
               >
-                sur WhatsApp
-              </a>
-            </>
-          ) : identite?.lien_email ? (
-            <>
-              {" "}
-              <a className="agency-ancre" href={identite.lien_email}>
-                par email
-              </a>
-            </>
+                {relance ? "Vérification…" : "Vérifier maintenant"}
+              </button>
+            </div>
           ) : (
-            " pour la régler."
+            // La facture a disparu des impayées : c'est la seule chose que la
+            // plateforme peut affirmer ici, et c'est déjà une information. Aucun
+            // bouton « Vérifier » ne reste, il n'aurait plus rien à relire.
+            <p className="agency-forfait-retour-texte">
+              Aucune facture à régler pour cet espace.
+            </p>
           )}
-          .
-        </p>
+        </div>
+      )}
+
+      {factures.length > 0 && (
+        <>
+          <p className="agency-section-intro">
+            {factures.length === 1
+              ? "1 facture en attente."
+              : `${factures.length} factures en attente.`}
+          </p>
+
+          <ul className="agency-factures">
+            {factures.map((facture) => (
+              <CarteFacture
+                key={facture.id}
+                facture={facture}
+                paiementAutorise={facturation.can_pay_online === true && facture.statut_connu}
+                lienContact={identite?.lien_whatsapp ?? identite?.lien_email ?? null}
+              />
+            ))}
+          </ul>
+        </>
       )}
     </section>
   );
@@ -554,11 +647,32 @@ function SectionFacturation({
  * seconde ligne de défense, pas une seconde règle — elle rend la phrase
  * impossible à écrire même si la normalisation change un jour.
  *
- * Le statut d'une facture reste un CODE : la plateforme n'en fournit aucun
- * libellé et le connecteur n'en invente pas. Un code connu est affiché tel quel,
- * un code inconnu n'est pas affiché.
+ * AUCUN CODE BRUT À L'ÉCRAN, PAS MÊME UN CODE CONNU
+ * ------------------------------------------------
+ * Le statut d'une facture était affiché tel quel : un commerçant lisait
+ * littéralement « open » ou « uncollectible » sur son tableau de bord, en anglais
+ * et en snake_case, à côté d'un montant et d'une échéance en français. Le contrat
+ * partagé interdit explicitement d'afficher un code, et il ne fournit AUCUN
+ * libellé de statut de facture : le connecteur n'en invente donc pas.
+ *
+ * L'absence de mot est un trou du contrat, pas une raison d'écrire le code. Il
+ * est remonté au maître (`LIBELLE_STATUT_FACTURE`, `decrireStatutFacture`) :
+ * `open` se dit « à régler » et `uncollectible` « paiement refusé », un
+ * commerçant doit savoir que son dernier règlement mobile money a échoué. En
+ * attendant, l'information est déjà là ailleurs : la facture est listée dans les
+ * factures à régler, et le bouton de règlement est proposé quand la plateforme
+ * l'autorise. Ce que le code brut ajoutait, c'était une promesse de rigueur que
+ * l'écran ne tenait pas.
  */
-function CarteFacture({ facture }: { facture: AgencyInvoice }) {
+function CarteFacture({
+  facture,
+  paiementAutorise,
+  lienContact,
+}: {
+  facture: AgencyInvoice;
+  paiementAutorise: boolean;
+  lienContact: string | null;
+}) {
   const echeance =
     typeof facture.echeance_le === "string" ? formaterDate(facture.echeance_le) : null;
   return (
@@ -569,9 +683,6 @@ function CarteFacture({ facture }: { facture: AgencyInvoice }) {
         ) : (
           <span className="agency-mention agency-mention--pied">Facture sans numéro</span>
         )}
-        {facture.statut_connu === true && typeof facture.statut === "string" && (
-          <span className="agency-facture-statut">{facture.statut}</span>
-        )}
       </span>
       <span className="agency-facture-montant">
         {facture.montant_cents === 0 ? LIBELLE_PRIX_INCLUS : facture.montant_libelle}
@@ -580,6 +691,14 @@ function CarteFacture({ facture }: { facture: AgencyInvoice }) {
         <time className="agency-facture-echeance" dateTime={facture.echeance_le ?? undefined}>
           {echeance}
         </time>
+      )}
+      {facture.montant_cents > 0 && (
+        <AgencyInvoicePayment
+          invoiceId={facture.id}
+          invoiceLabel={facture.numero ?? "sans numéro"}
+          paymentAvailable={paiementAutorise}
+          contactUrl={lienContact}
+        />
       )}
     </li>
   );

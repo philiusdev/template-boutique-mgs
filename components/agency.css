@@ -596,6 +596,39 @@
   font-size: 0.78rem;
 }
 
+.agency-paiement {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.agency-paiement-bouton { margin: 0; min-height: 38px; padding: 8px 12px; }
+.agency-paiement-contact { font-size: 0.82rem; }
+.agency-paiement-message { flex-basis: 100%; margin: 0; color: var(--mgs-alerte); font-size: 0.82rem; line-height: 1.45; }
+
+.agency-forfaits { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+
+.agency-forfait {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--mgs-line-fort);
+  border-radius: var(--mgs-radius);
+  background: var(--mgs-surface-2);
+}
+
+.agency-forfait-entete { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
+.agency-forfait-nom { margin: 0; color: var(--mgs-ink); font-size: 0.98rem; }
+.agency-forfait-tarif { color: var(--mgs-accent-vif); font-size: 0.94rem; }
+.agency-forfait-description,
+.agency-forfait-essai { margin: 0; color: var(--mgs-ink-doux); font-size: 0.84rem; line-height: 1.5; }
+.agency-forfait-options { display: grid; gap: 5px; margin: 0; padding-left: 18px; color: var(--mgs-ink-doux); font-size: 0.82rem; line-height: 1.45; }
+.agency-forfait-choisir { margin: 4px 0 0; justify-self: start; }
+.agency-forfait-retour { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border-left: 3px solid var(--mgs-succes); background: var(--mgs-surface-2); }
+.agency-forfait-retour-texte { margin: 0; color: var(--mgs-ink); font-size: 0.86rem; line-height: 1.5; }
+
 /* ---- 6. Prestations -------------------------------------------------------- */
 
 .agency-prestations { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
@@ -922,6 +955,7 @@
 
 .agency-banner-warning { border-color: rgba(232, 185, 58, 0.45); background: rgba(232, 185, 58, 0.1); }
 .agency-banner-info { background: var(--mgs-accent-soft); }
+.agency-banner-info .agency-banner-icone { color: var(--mgs-accent); }
 .agency-banner-icone { flex: none; color: var(--mgs-alerte); font-size: 1.1rem; line-height: 1; }
 .agency-banner-texte { flex: 1; min-width: 0; }
 .agency-banner-action { margin-left: auto; }
