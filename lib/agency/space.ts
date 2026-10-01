@@ -58,6 +58,7 @@ import type {
   ReponseAnnoncesBrut,
   ReponseEspaceAgenceBrut,
   ReponseFacturationBrut,
+  SectionAgence,
 } from "./types";
 
 /**
@@ -78,6 +79,14 @@ import type {
  *  - UNE VALEUR INATTENDUE EST ÉLIMINÉE, PAS AFFICHÉE. Un titre vide, un
  *    identifiant absent, un statut hors vocabulaire : l'entrée part, elle ne
  *    s'affiche pas. Une carte sans titre se lit comme une panne de l'agence.
+ *  - UNE SECTION MUETTE EST DÉCLARÉE, JAMAIS DÉGUISÉE. Le vide laissé par une
+ *    lecture qui n'a pas répondu est reporté dans `indisponibles` (voir
+ *    `sectionsIndisponibles`) : une liste vide se lit comme une phrase sur
+ *    l'agence — « vous n'avez pas encore de demande », « aucune facture
+ *    impayée » — et le connecteur n'a pas le droit de laisser une panne écrire
+ *    cette phrase à la place de l'agence. Une réponse 200 valide qui porte une
+ *    liste vide n'est PAS une indisponibilité : là, la plateforme a parlé, et ce
+ *    qu'elle a dit est vrai.
  *
  * Sur l'identité, la plateforme l'emporte TOUJOURS quand elle répond : aucune
  * variable d'environnement n'est lue si `/api/v1/agency` a répondu, même pour
@@ -577,7 +586,9 @@ export function agencyWebsiteUrl(): string | null {
  *
  * Les trois lectures partent EN PARALLÈLE : c'est la latence de la plus lente
  * qui compte, et la page client ne doit pas attendre trois temps d'aller-retour
- * pour afficher un onglet de dashboard.
+ * pour afficher un onglet de dashboard. Comme elles partent ensemble, elles
+ * n'échouent pas ensemble non plus : c'est pourquoi `indisponibles` est calculé
+ * APRÈS les trois lectures, à partir de ce que chacune a réellement rendu.
  */
 export async function loadAgencySpace(): Promise<AgencySpace | null> {
   const [espaceBrut, annoncesBrut, facturationBrut] = await Promise.all([
@@ -591,11 +602,17 @@ export async function loadAgencySpace(): Promise<AgencySpace | null> {
   // `agence.identite` fait foi ; le `identite` de premier niveau n'existe que
   // pour une plateforme plus ancienne, et ne l'emporte jamais.
   const identiteBrut = agence?.identite ?? plateforme?.identite ?? null;
+  // Une seule lecture porte le catalogue ET les demandes : `catalogue connu` est
+  // donc la réponse de `/api/v1/agency`, rien d'autre. Le filet de repli
+  // s'applique exactement dans ce cas, et jamais quand la plateforme a répondu.
+  const catalogueConnu = plateforme !== null;
   // La plateforme ignore ici l'environnement : dès qu'elle a répondu, c'est
   // elle qui fait foi, même pour dire « je n'ai pas de coordonnées ».
-  const identite = normaliserIdentite(identiteBrut, plateforme === null);
+  const identite = normaliserIdentite(identiteBrut, !catalogueConnu);
 
-  const joignable = plateforme !== null || annoncesBrut !== null || facturationBrut !== null;
+  const facturation = normaliserFacturation(facturationBrut);
+
+  const joignable = catalogueConnu || annoncesBrut !== null || facturation !== null;
   if (!joignable && !filetConfigure()) return null;
 
   return {
@@ -605,9 +622,58 @@ export async function loadAgencySpace(): Promise<AgencySpace | null> {
     abonnement: normaliserAbonnement(plateforme?.abonnement),
     demandes: normaliserDemandes(plateforme?.demandes),
     annonces: normaliserAnnonces(annoncesBrut),
-    facturation: normaliserFacturation(facturationBrut),
+    facturation,
     joignable,
+    indisponibles: sectionsIndisponibles(
+      catalogueConnu,
+      annoncesBrut !== null,
+      facturation !== null,
+    ),
   };
+}
+
+/**
+ * Les sections que la plateforme n'a pas pu servir, dans l'ordre du type.
+ *
+ * Le risque que cette liste ferme, c'est qu'un écran dise une FAUSSE nouvelle :
+ * sans elle, un 503 sur `/api/v1/billing` — ou sur n'importe quelle lecture,
+ * puisque le court-circuit d'échec est désormais par chemin — remplit le
+ * panneau de tableaux vides, et l'agent lit « Vous n'avez pas encore de
+ * demande », « Aucune facture impayée », « Aucune prestation publiée ». Le
+ * commerçant appelle alors l'agence au sujet d'un problème inexistant, et
+ * l'agent passe une demi-journée à chercher pourquoi ses données ont disparu
+ * alors que la plateforme répond très bien. Un composant qui veut distinguer
+ * « rien à afficher » de « je n'ai pas pu le savoir » n'a que ce champ à lire.
+ *
+ * Règles, et aucune autre :
+ *
+ *  - `catalogue` et `demandes` se lèvent et se couchent ENSEMBLE. Elles sortent
+ *    de la même lecture, donc les déclarer disponibles l'un sans l'autre
+ *    afficherait un suivi sur des données que personne n'a lues. L'identité du
+ *    filet de repli ne change rien à ce couple : elle aussi n'existe que parce
+ *    que la lecture a échoué.
+ *  - `annonces` dépend de la seule réponse d'`/api/v1/announcements`, et
+ *    `facturation` de la seule réponse d'`/api/v1/billing`.
+ *  - `facturation` est déduite du RÉSULTAT NORMALISÉ, pas de la seule présence
+ *    de la réponse : un 200 dont le corps n'est pas l'objet attendu ne vaut pas
+ *    mieux qu'une absence, et dans les deux cas `facturation` vaut `null`. Les
+ *    deux ne peuvent donc pas diverger — pas de « pas de données » et « section
+ *    disponible » affichés en même temps.
+ *  - Un 200 valide qui porte une liste VIDE est une RÉPONSE : rien n'est
+ *    déclaré indisponible, et c'est le comportement qui doit rester le plus
+ *    courant. `indisponibles` est la preuve d'une panne, pas le prix d'un
+ *    catalogue réellement vide.
+ */
+function sectionsIndisponibles(
+  catalogueConnu: boolean,
+  annoncesRepondues: boolean,
+  facturationConnue: boolean,
+): SectionAgence[] {
+  const indisponibles: SectionAgence[] = [];
+  if (!catalogueConnu) indisponibles.push("catalogue", "demandes");
+  if (!annoncesRepondues) indisponibles.push("annonces");
+  if (!facturationConnue) indisponibles.push("facturation");
+  return indisponibles;
 }
 
 /** Le filet de repli est-il renseigné ? C'est lui qui décide du `null`. */
@@ -642,10 +708,26 @@ export async function chargerDemandesAgence(): Promise<DemandeAffiche[]> {
  * de données est purgé et une page ISR peut donc encore servir son HTML
  * précédent — d'où le paramètre.
  *
- * Le module `next/cache` est importé DYNAMIQUIQUEMENT et tout est enveloppé :
+* Le module `next/cache` est importé DYNAMIQUIQUEMENT et tout est enveloppé :
  * hors contexte de requête Next — une application Expo, un script, un test —
  * l'appel ne doit rien casser. La fonction renvoie alors `false` au lieu de
  * lever, et le journal le dit.
+ *
+ * L'expiration est IMMÉDIATE, pas différée : c'est toute la raison d'être de cette
+ * route. Le profil `"max"` sert l'ancienne valeur encore une fois, pendant qu'elle
+ * se revalide en arrière-plan — c'est-à-dire qu'un agent qui vient de changer une
+ * prestation, qui purge, puis qui recharge voit encore l'ancienne offre. Sur une
+ * console d'administration c'est le pire comportement possible : la personne vient
+ * de faire le changement, elle le voit échouer, et elle le refait. `{ expire: 0 }`
+ * invalide l'entrée au moment de l'appel, et le rendu suivant relit la base.
+ *
+ * `updateTag` ferait la même chose avec un mot de plus, mais il est réservé aux
+ * Server Actions : appelé depuis une Route Handler, il lève. D'où `revalidateTag`,
+ * avec son profil d'expiration.
+ *
+ * `revalidatePath` reste nécessaire en complément : il vide les pages déjà rendues,
+ * alors que l'étiquette ne vide que le cache de données. Sans lui, une page ISR peut
+ * encore servir son HTML précédent — d'où le paramètre.
  *
  * @param chemins Chemins du site à revalider, par exemple `"/"` ou
  *   `"/dashboard"`. Un chemin qui ne commence pas par `/` est ignoré.
@@ -653,12 +735,7 @@ export async function chargerDemandesAgence(): Promise<DemandeAffiche[]> {
 export async function purgerCacheAgence(chemins: readonly string[] = []): Promise<boolean> {
   try {
     const { revalidateTag, revalidatePath } = await import("next/cache");
-    // Le second argument est obligatoire depuis Next 16 : `revalidateTag` y
-    // attend le profil de revalidation. Un repli « à un seul argument » pour
-    // les versions anteriores ne tient pas, parce que ce code mort est tout de
-    // meme type par le compilateur — le site client échouerait sur `next build`
-    // alors que la branche de repli n'est jamais atteinte.
-    revalidateTag(ETIQUETTE_CACHE_AGENCE, "max");
+    revalidateTag(ETIQUETTE_CACHE_AGENCE, { expire: 0 });
     for (const chemin of chemins) {
       if (typeof chemin !== "string" || !chemin.startsWith("/")) continue;
       revalidatePath(chemin);

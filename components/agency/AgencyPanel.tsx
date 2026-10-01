@@ -1,5 +1,7 @@
 "use client";
 
+import { useId } from "react";
+
 import { FormulaireNouvelleDemande } from "./agency-formulaire";
 import { ListeDemandes } from "./agency-demandes";
 import {
@@ -73,6 +75,8 @@ export type AgencyPanelProps = {
   routeRevalidation?: string | null;
   /** Chemin du site revalidé après un envoi. Par défaut `/`. */
   cheminRevalidation?: string;
+  /** Route locale de réponse à un devis. Par défaut `/api/agency/requests/reponse`. */
+  routeReponse?: string | null;
 };
 
 export function AgencyPanel({
@@ -82,7 +86,28 @@ export function AgencyPanel({
   routeDemande,
   routeRevalidation,
   cheminRevalidation,
+  routeReponse,
 }: AgencyPanelProps) {
+  // Préfixe d'identifiant, calculé UNE FOIS par panneau et redescendu aux
+  // sections. Il n'est pas calculé par section : deux appels à `useId()` rendus dans
+  // deux composants frères ne partagent pas la même valeur, donc chaque titre
+  // référencerait un identifiant qui n'existe pas.
+  //
+  // Sans ce préfixe, ce panneau ne peut pas coexister avec un autre. Il est monté
+  // à la fois comme onglet du tableau de bord et à l'intérieur du tiroir du bouton
+  // flottant, et les deux exemplaires sont donc présents en même temps sur `/admin`.
+  // Les identifiants en dur pointaient alors sur le PREMIER exemplaire : un
+  // `aria-labelledby` décrivait le second, et les `<label for>` du formulaire
+  // visaient un `id` dupliqué — donc aucun champ n'était étiquetable, et chaque
+  // lecture d'écran annonçait le titre de la mauvaise section. Le préfixe rend
+  // chaque copie autonome, ce qui est la seule façon dont deux instances peuvent
+  // coexister.
+  //
+  // Le crochet est appelé AVANT la garde `null` : un hook ne peut pas être appelé
+  // conditionnellement, et un panneau qui disparaît après avoir eu un identifiant
+  // doit pouvoir le rendre à nouveau.
+  const suffixe = useId();
+
   // La garde d'or. Elle est aussi placée sur chaque section, parce qu'un objet
   // normalisé par le réseau peut porter une liste `undefined` : deux lignes, pas
   // une, et la page du dashboard ne tombe jamais.
@@ -90,15 +115,46 @@ export function AgencyPanel({
 
   const identite = space.identite ?? null;
 
+  // Une section que la plateforme n'a pas pu servir ne doit pas laisser croire
+  // qu'elle est vide. Le connecteur distingue ces deux cas dans
+  // `space.indisponibles` ; ici on ne fait que lire ce champ, sans jamais le
+  // recalculer : une liste vide signifie « la plateforme a répondu, il n'y a
+  // simplement rien », et doit laisser la section se taire comme avant.
+  const indisponibles = Array.isArray(space.indisponibles) ? space.indisponibles : [];
+  const indisponible = (section: string) => indisponibles.indexOf(section as never) >= 0;
+
   return (
     <div className="agency-panneau">
-      <SectionIdentite identite={identite} joignable={space.joignable !== false} />
-      <SectionAbonnement abonnement={space.abonnement} />
-      <SectionFacturation facturation={space.facturation} identite={identite} />
-      <SectionPrestations prestations={space.prestations} />
-      <ListeDemandes demandes={space.demandes} />
-      <SectionAnnonces annonces={space.annonces} />
-      <SectionOffres offres={space.offres} />
+      <SectionIdentite
+        identite={identite}
+        joignable={space.joignable !== false}
+        suffixe={suffixe}
+      />
+      <SectionAbonnement abonnement={space.abonnement} suffixe={suffixe} />
+      <SectionFacturation
+        facturation={space.facturation}
+        identite={identite}
+        suffixe={suffixe}
+      />
+      <SectionPrestations
+        prestations={space.prestations}
+        indisponible={indisponible("catalogue")}
+        suffixe={suffixe}
+      />
+      <ListeDemandes
+        demandes={space.demandes}
+        indisponible={indisponible("demandes")}
+        suffixe={suffixe}
+        routeReponse={routeReponse}
+        routeRevalidation={routeRevalidation}
+        cheminRevalidation={cheminRevalidation}
+      />
+      <SectionAnnonces
+        annonces={space.annonces}
+        indisponible={indisponible("annonces")}
+        suffixe={suffixe}
+      />
+      <SectionOffres offres={space.offres} suffixe={suffixe} />
       <FormulaireNouvelleDemande
         prestations={space.prestations}
         requesterName={requesterName}
@@ -106,6 +162,7 @@ export function AgencyPanel({
         routeDemande={routeDemande}
         routeRevalidation={routeRevalidation}
         cheminRevalidation={cheminRevalidation}
+        suffixe={suffixe}
       />
     </div>
   );
@@ -132,9 +189,12 @@ export function AgencyPanel({
 function SectionIdentite({
   identite,
   joignable,
+  suffixe,
 }: {
   identite: IdentiteAgence | null;
   joignable: boolean;
+  /** Préfixe d'identifiant du panneau. Voir `AgencyPanel`. */
+  suffixe: string;
 }) {
   if (!identite) return null;
 
@@ -147,8 +207,8 @@ function SectionIdentite({
   const sansContact = lienWhatsapp === null && lienEmail === null && siteWeb === null;
 
   return (
-    <section className="agency-section" aria-labelledby="agency-titre-identite">
-      <h2 className="agency-section-titre" id="agency-titre-identite">
+    <section className="agency-section" aria-labelledby={`agency-titre-identite-${suffixe}`}>
+      <h2 className="agency-section-titre" id={`agency-titre-identite-${suffixe}`}>
         {nom ?? "Votre agence"}
       </h2>
       <p className="agency-section-intro">
@@ -257,7 +317,14 @@ function SectionIdentite({
  *    renouvellement qui n'existe pas, et le commerçant ne viendrait pas à la
  *    échéance.
  */
-function SectionAbonnement({ abonnement }: { abonnement: AbonnementAffiche | null | undefined }) {
+function SectionAbonnement({
+  abonnement,
+  suffixe,
+}: {
+  abonnement: AbonnementAffiche | null | undefined;
+  /** Préfixe d'identifiant du panneau. Voir `AgencyPanel`. */
+  suffixe: string;
+}) {
   if (!abonnement) return null;
 
   const statut = typeof abonnement.statut === "string" ? abonnement.statut : "inconnu";
@@ -267,8 +334,8 @@ function SectionAbonnement({ abonnement }: { abonnement: AbonnementAffiche | nul
   const jours = typeof abonnement.jours_restants === "number" ? abonnement.jours_restants : null;
 
   return (
-    <section className="agency-section" aria-labelledby="agency-titre-abonnement">
-      <h2 className="agency-section-titre" id="agency-titre-abonnement">
+    <section className="agency-section" aria-labelledby={`agency-titre-abonnement-${suffixe}`}>
+      <h2 className="agency-section-titre" id={`agency-titre-abonnement-${suffixe}`}>
         Abonnement
       </h2>
 
@@ -384,16 +451,19 @@ function SectionAbonnement({ abonnement }: { abonnement: AbonnementAffiche | nul
 function SectionFacturation({
   facturation,
   identite,
+  suffixe,
 }: {
   facturation: AgencyBilling | null | undefined;
   identite: IdentiteAgence | null;
+  /** Préfixe d'identifiant du panneau. Voir `AgencyPanel`. */
+  suffixe: string;
 }) {
   if (!facturation || typeof facturation !== "object") return null;
 
   if (facturation.billing_available !== true) {
     return (
-      <section className="agency-section" aria-labelledby="agency-titre-facturation">
-        <h2 className="agency-section-titre" id="agency-titre-facturation">
+      <section className="agency-section" aria-labelledby={`agency-titre-facturation-${suffixe}`}>
+        <h2 className="agency-section-titre" id={`agency-titre-facturation-${suffixe}`}>
           Facturation
         </h2>
         <Mention>
@@ -418,8 +488,8 @@ function SectionFacturation({
   const payable = facturation.can_pay_online === true && portal !== null;
 
   return (
-    <section className="agency-section" aria-labelledby="agency-titre-facturation">
-      <h2 className="agency-section-titre" id="agency-titre-facturation">
+    <section className="agency-section" aria-labelledby={`agency-titre-facturation-${suffixe}`}>
+      <h2 className="agency-section-titre" id={`agency-titre-facturation-${suffixe}`}>
         Facturation
       </h2>
       <p className="agency-section-intro">
@@ -543,18 +613,39 @@ function CarteFacture({ facture }: { facture: AgencyInvoice }) {
  * lecteur, pas le montant du catalogue. Masquer le prix d'une prestation incluse
  * ferait perdre au commerçant l'information qui lui dit ce qu'il débite.
  */
-function SectionPrestations({ prestations }: { prestations: PrestationAffiche[] | null | undefined }) {
+function SectionPrestations({
+  prestations,
+  indisponible,
+  suffixe,
+}: {
+  prestations: PrestationAffiche[] | null | undefined;
+  /** La plateforme n'a pas répondu : ne pas écrire « aucun service ». */
+  indisponible: boolean;
+  /** Préfixe d'identifiant du panneau. Voir `AgencyPanel`. */
+  suffixe: string;
+}) {
   const liste = (Array.isArray(prestations) ? prestations : []).filter(Boolean);
-  if (liste.length === 0) return null;
+  // Une liste vide et une lecture en échec n'ont pas la même signification, et les
+  // confondre ferait écrire « cette agence ne propose aucune prestation » à un
+  // commerçant alors que la plateforme répond très bien. `indisponibles` est la
+  // seule source de vérité : on ne le recalcule pas ici.
+  if (liste.length === 0 && !indisponible) return null;
 
   return (
-    <section className="agency-section" aria-labelledby="agency-titre-prestations">
-      <h2 className="agency-section-titre" id="agency-titre-prestations">
+    <section className="agency-section" aria-labelledby={`agency-titre-prestations-${suffixe}`}>
+      <h2 className="agency-section-titre" id={`agency-titre-prestations-${suffixe}`}>
         Prestations
       </h2>
       <p className="agency-section-intro">
         Ce que l’agence propose pour ce site. Le délai est indicatif.
       </p>
+
+      {liste.length === 0 && (
+        <Mention ton="attention">
+          Les prestations de l’agence n’ont pas pu être consultées. Réessayez dans un
+          instant, ou écrivez à l’agence : il est possible qu’il n’y en ait aucune.
+        </Mention>
+      )}
 
       <ul className="agency-prestations">
         {liste.map((prestation) => (
@@ -598,15 +689,31 @@ function SectionPrestations({ prestations }: { prestations: PrestationAffiche[] 
  * style qui en tire la couleur. Aucune classe n'est construite ici à partir de
  * la valeur brute.
  */
-function SectionAnnonces({ annonces }: { annonces: AgencyAnnouncement[] | null | undefined }) {
+function SectionAnnonces({
+  annonces,
+  indisponible,
+  suffixe,
+}: {
+  annonces: AgencyAnnouncement[] | null | undefined;
+  /** La plateforme n'a pas répondu : ne pas écrire « aucune nouvelle ». */
+  indisponible: boolean;
+  /** Préfixe d'identifiant du panneau. Voir `AgencyPanel`. */
+  suffixe: string;
+}) {
   const liste = (Array.isArray(annonces) ? annonces : []).filter(Boolean);
-  if (liste.length === 0) return null;
+  if (liste.length === 0 && !indisponible) return null;
 
   return (
-    <section className="agency-section" aria-labelledby="agency-titre-annonces">
-      <h2 className="agency-section-titre" id="agency-titre-annonces">
+    <section className="agency-section" aria-labelledby={`agency-titre-annonces-${suffixe}`}>
+      <h2 className="agency-section-titre" id={`agency-titre-annonces-${suffixe}`}>
         Nouvelles de l’agence
       </h2>
+      {liste.length === 0 && (
+        <Mention ton="attention">
+          Les nouvelles de l’agence n’ont pas pu être consultées. Réessayez dans un
+          instant.
+        </Mention>
+      )}
       <div className="agency-liste">
         {liste.map((annonce) => {
           const publie = typeof annonce.published_at === "string" ? formaterDate(annonce.published_at) : null;
@@ -647,13 +754,20 @@ function SectionAnnonces({ annonces }: { annonces: AgencyAnnouncement[] | null |
  * produirait un bouton qui ouvre un chat vers personne, et le commerçant
  * croirait que l'offre est périmée.
  */
-function SectionOffres({ offres }: { offres: OffreAffiche[] | null | undefined }) {
+function SectionOffres({
+  offres,
+  suffixe,
+}: {
+  offres: OffreAffiche[] | null | undefined;
+  /** Préfixe d'identifiant du panneau. Voir `AgencyPanel`. */
+  suffixe: string;
+}) {
   const liste = (Array.isArray(offres) ? offres : []).filter(Boolean);
   if (liste.length === 0) return null;
 
   return (
-    <section className="agency-section" aria-labelledby="agency-titre-offres">
-      <h2 className="agency-section-titre" id="agency-titre-offres">
+    <section className="agency-section" aria-labelledby={`agency-titre-offres-${suffixe}`}>
+      <h2 className="agency-section-titre" id={`agency-titre-offres-${suffixe}`}>
         Nos autres services
       </h2>
       <p className="agency-section-intro">Pour faire grandir votre boutique.</p>

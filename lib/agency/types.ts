@@ -211,6 +211,39 @@ export type AgencyBilling = {
 };
 
 /* -------------------------------------------------------------------------- *
+ * Ce que la plateforme n'a pas su dire.
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Sections de l'espace, telles que la plateforme a pu ou n'a pas pu les servir.
+ *
+ * Une liste vide EST une information ; une liste vide sans cette distinction n'en
+ * est pas une. `prestations: []` signifie deux choses très différentes — « cette
+ * agence n'a pas encore de prestation publiée » (une information) et « la
+ * plateforme ne m'a pas répondu » (une panne), et le composant ne peut pas les
+ * distinguer. Le pire symptôme de cette confusion n'est pas une section
+ * manquante : c'est un écran qui affirme une absence. « Vous n'avez pas encore
+ * de demande » au commerçant qui en a trois est une phrase que le connecteur
+ * n'a pas le droit d'écrire quand il n'a rien su.
+ *
+ * Le vocabulaire est celui de l'écran, pas celui des routes, parce que ce sont
+ * les composants qui le consomment :
+ *
+ *  - `catalogue` : l'identité, les prestations, les offres et l'abonnement — tout
+ *    ce que porte `GET /api/v1/agency`. C'est une seule lecture, donc une seule
+ *    section : `catalogue` indisponible emporte nécessairement `demandes`.
+ *  - `demandes` : le suivi, même source que `catalogue`.
+ *  - `annonces` : `GET /api/v1/announcements`.
+ *  - `facturation` : `GET /api/v1/billing`, et par construction `facturation`
+ *    vaut `null` si et seulement si cette section est listée ici.
+ *
+ * La valeur est toujours un tableau, jamais `undefined` : `indisponibles` est
+ * la seule source de vérité sur la disponibilité, donc un composant doit pouvoir
+ * la lire sans garde ni valeur par défaut.
+ */
+export type SectionAgence = "catalogue" | "demandes" | "annonces" | "facturation";
+
+/* -------------------------------------------------------------------------- *
  * L'espace, tel que le site l'affiche.
  * -------------------------------------------------------------------------- */
 
@@ -221,6 +254,10 @@ export type AgencyBilling = {
  * fonctionne alors normalement, sans onglet « Mon agence ». C'est la règle d'or
  * du connecteur (`INSTALLATION-CONNECTEUR.md` §1 et §5.3) : plateforme down ou
  * clé absente, le site ne casse jamais.
+ *
+ * Un espace non nul n'est PAS la preuve que la plateforme a répondu : c'est
+ * précisément ce que dit `indisponibles`. Un composant qui traite une liste vide
+ * comme une absence affiche une panne comme une vérité — il doit passer par là.
  */
 export type AgencySpace = {
   /** Identité de l'agence, bouton flottant compris, par le contrat. */
@@ -239,4 +276,6 @@ export type AgencySpace = {
   facturation: AgencyBilling | null;
   /** Faux si les trois lectures de la plateforme ont toutes échoué. */
   joignable: boolean;
+  /** Sections que la plateforme n'a pas pu servir. Liste vide = tout est connu. */
+  indisponibles: SectionAgence[];
 };

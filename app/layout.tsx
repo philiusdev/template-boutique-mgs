@@ -4,8 +4,6 @@ import "../components/agency.css";
 import { NetworkNotice, SiteHeader } from "@/components/site-shell";
 import { SiteFooter } from "@/components/site-footer";
 import { StoreProvider } from "@/components/store-provider";
-import { AgencyFloatingButton } from "@/components/agency/AgencyFloatingButton";
-import { chargerEspaceAgence } from "@/lib/agency-bouton-flottant";
 
 export const metadata: Metadata = {
   title: "Royal Shop — La mode pour tous",
@@ -21,41 +19,55 @@ export const viewport: Viewport = {
 };
 
 /**
- * Le layout racine porte le bouton flottant de l'agence.
+ * Le layout racine n'est plus `async` : il ne lit plus rien.
  *
- * POINT DE MONTAGE — pourquoi ici, et nulle part ailleurs :
+ * POINT DE MONTAGE — pourquoi l'espace « Mon agence » est INTERDIT ici, et
+ * pourquoi il vit dans `app/admin/page.tsx` :
  *
- * Le bouton doit exister sur TOUTES les pages : accueil, catalogue, fiche
- * produit, panier, commande, connexion, espace client, tableau de bord. Le layout
- * racine est le seul endroit du routeur Next dont c'est la définition même : il
- * enveloppe chaque page, présente ou future, sans qu'aucune d'elle ait à
- * s'en souvenir. Le monter dans `site-shell.tsx` aurait demandé d'y penser à
- * chaque nouvelle page ; le monter dans `app/admin/page.tsx` l'aurait borné au
- * dashboard. Une page ajoutée dans six mois porterait le bouton parce que le
- * layout le porte, et non parce qu'un développeur s'en est souvenu.
+ * Ce fichier enveloppe TOUTES les pages du site, y compris celles qu'un
+ * visiteur anonyme ouvre sans se connecter : l'accueil, le catalogue, une fiche
+ * produit, le panier, la commande. Or `AgencySpace` n'est pas une page publique
+ * de l'agence : c'est le DOSSIER COMMERCIAL DU COMMERCÇANT. Il contient son
+ * nom d'agence, sa formule d'abonnement, son tarif, ses avantages, ses
+ * factures impayées (numéro, montant, échéance), et le suivi de ses demandes
+ * avec l'objet, le devis et les coordonnées du demandeur. Le commerçant est le
+ * SEUL client de l'agence — c'est son abonnement et ses factures. Un visiteur
+ * n'a aucun abonnement à voir et n'a aucun droit à le voir.
  *
- * L'ordre de rendu est respecté : le composant vient APRÈS `{children}` et après
- * le pied de page. Il est en `position: fixed`, il ne pousse donc rien, mais il
- * reste après le contenu dans l'ordre du document : au clavier, un lecteur
- * d'écran parcourt la page, puis la zone de dialogue — jamais l'inverse.
+ * Une seule ligne suffisait à ouvrir la fuite :
  *
- * Le layout devient `async` à cause de cette seule ligne. C'est sans
- * conséquence sur le rendu statique : les trois lectures de l'agence portent
- * `next: { revalidate }` (`lib/agency/client.ts`), elles sont mises en cache et
- * ne déclassent donc aucune page en rendu dynamique. Le site reste statique, et
- * ne paie la plateforme qu'une fois par fenêtre de 60 s. Voir
- * `lib/agency-bouton-flottant.ts` pour le coût exact quand la plateforme est
- * muette, et pour les deux gardes qui ferment la règle.
+ *     const espaceAgence = await chargerEspaceAgence();
  *
- * `space` à `null` n'est pas un cas dégradé : c'est le mode normal d'un site
- * sans identifiants MGS, et le composant rend alors `null`. Aucun onglet vide,
- * aucun bouton fantôme, aucune erreur — la règle d'or du projet.
+ * Elle interrogeait la plateforme pour TOUT LE MONDE, et le composant client
+ * recevait l'espace par prop — donc le HTML prérendu de la page PUBLIQUE
+ * embarquait la facture, le numéro de facture et la formule, en clair dans la
+ * charge utile RSC. L'inspecteur suffisait à les lire : aucun clic, aucune
+ * requête, aucune course. Une condition côté client (`if (!admin)` dans le
+ * composant) n'aurait rien fermé, parce que la donnée était déjà partie avant
+ * qu'il ait à décider quoi que ce soit. C'est pourquoi le correctif n'est pas
+ * « cacher le bouton » : c'est « ne jamais charger la donnée hors du tableau de
+ * bord ».
  *
- * Aucune identité n'est passée : le layout sert aussi les visiteurs anonymes, et
- * lire la session ici rendrait toute la boutique dynamique. Le demandeur est
- * repris côté serveur, au moment de l'envoi, par `/api/agency/request`.
+ * Le même raisonnement interdit de monter ici un composant intermédiaire qui
+ * lirait la session : `cookies()` dans le layout racine déclasserait les pages
+ * du site en rendu dynamique. On perdrait les 10 pages `○ Static` du modèle pour
+ * une information qui ne concerne qu'une page. `/admin` lit déjà la session —
+ * il en a besoin pour `profiles.role` — donc `/admin` est déjà dynamique en
+ * boutique réelle, et le vérifier ne coûte rien : c'est le même aller-retour.
+ *
+ * Ce qui reste public, et pourquoi ce n'est pas une fuite : `AgencyCredit`, dans
+ * `SiteFooter`. C'est une ATTRIBUTION — « Site créé par MindGraphixSolution » et
+ * un lien vers la vitrine publique de l'agence — pas une donnée commerciale. Elle
+ * ne lit ni abonnement, ni facture, ni demande, ni coordonnées de demandeur :
+ * seulement `MGS_WEBSITE_URL`, par `agencyWebsiteUrl()`. C'est la seule chose que
+ * l'agence publie volontairement sur le site qu'elle construit, et c'est ainsi
+ * qu'elle se fait créditer. La retirer au public lui ferait perdre son crédit
+ * pour protéger une information qu'elle a choisi de publier.
+ *
+ * `agency.css` reste importé ici : c'est lui qui porte `.agency-credit`, lu par
+ * le pied de page ci-dessous. Le reste de cette feuille sert au tiroir, monté
+ * dans `/admin`, et ne coûte rien d'être présente.
  */
-export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const espaceAgence = await chargerEspaceAgence();
-  return <html lang="fr"><body className="streetwear-site"><StoreProvider><NetworkNotice /><SiteHeader />{children}<SiteFooter /><AgencyFloatingButton space={espaceAgence} /></StoreProvider></body></html>;
+export default function RootLayout({ children }: LayoutProps<"/">) {
+  return <html lang="fr"><body className="streetwear-site"><StoreProvider><NetworkNotice /><SiteHeader />{children}<SiteFooter /></StoreProvider></body></html>;
 }
