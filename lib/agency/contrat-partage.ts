@@ -89,6 +89,15 @@
 /** Devise de reference du projet : le franc CFA (XOF). */
 export const DEVISE_PAR_DEFAUT = "XOF";
 
+export const TYPES_SITE = ["boutique", "vitrine", "application", "custom"] as const;
+export type TypeSite = (typeof TYPES_SITE)[number];
+export const LIBELLES_TYPES_SITE: Record<TypeSite, string> = {
+  boutique: "Boutique e-commerce",
+  vitrine: "Site vitrine",
+  application: "Application / mobile",
+  custom: "Plateforme / site personnalisé",
+};
+
 /** Identite affichee quand `agency_settings` est absente ou illisible. */
 export const NOM_AGENCE_PAR_DEFAUT = "MindGraphixSolution";
 
@@ -333,7 +342,7 @@ export const COLONNES_ABONNEMENT =
 /** `billing_plans`, colonne par colonne (migration 202609290010). */
 export const COLONNES_PLAN =
   "id,code,name,description,price_cents,currency,billing_interval,features," +
-  "trial_days,is_active,sort_order,created_at";
+  "trial_days,is_active,sort_order,created_at,compatible_site_types";
 
 /**
  * L'abonnement et sa formule, en une seule selection.
@@ -507,6 +516,7 @@ export type LignePlan = {
   is_active: boolean;
   sort_order: number;
   created_at: string;
+  compatible_site_types?: TypeSite[];
 };
 
 /** `billing_subscriptions` : au plus une ligne par espace. */
@@ -529,7 +539,7 @@ export type LigneAbonnement = {
 /** Forme publique d'un forfait pour le catalogue des sites clients. */
 export type ForfaitFacturationPublic = Pick<
   LignePlan,
-  "id" | "code" | "name" | "description" | "price_cents" | "currency" | "billing_interval" | "features" | "trial_days"
+  "id" | "code" | "name" | "description" | "price_cents" | "currency" | "billing_interval" | "features" | "trial_days" | "compatible_site_types"
 >;
 
 /** Facture impayee renvoyee au site rattache a son tenant. */
