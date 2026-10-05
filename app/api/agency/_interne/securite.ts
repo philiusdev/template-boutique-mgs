@@ -40,6 +40,15 @@ import { z } from "zod";
 /** Rôles autorisés à administrer l'espace « Mon agence » d'un site. */
 export const ROLES_ADMINISTRATION: readonly string[] = ["admin"];
 
+function emailEstAdministrateurConfigure(email: string | null): boolean {
+  if (!email) return false;
+  const adresses = process.env.MGS_SITE_ADMIN_EMAILS
+    ?.split(",")
+    .map((adresse) => adresse.trim().toLowerCase())
+    .filter(Boolean);
+  return Boolean(adresses?.length && adresses.includes(email.trim().toLowerCase()));
+}
+
 /** Longueur maximale d'un nom de demandeur, celle du schéma de la plateforme. */
 const NOM_MAX = 120;
 
@@ -160,6 +169,9 @@ async function lireSessionInterne(exigerRole: boolean): Promise<ResultatSession>
     role: null,
   };
   if (!exigerRole) return { ok: true, session };
+  if (emailEstAdministrateurConfigure(session.email)) {
+    return { ok: true, session: { ...session, role: "admin" } };
+  }
 
   let profil: { role?: string | null } | null = null;
   try {
