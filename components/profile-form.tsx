@@ -11,6 +11,7 @@ import { isValidBurkinaPhoneNumber, toBurkinaPhoneHref, toSavedBurkinaPhoneNumbe
 import { getNameMonogram } from "@/lib/name";
 import { BurkinaPhoneInput } from "@/components/burkina-phone-input";
 import { useStore } from "@/components/store-provider";
+import { recordCustomerActivity } from "@/lib/customer-activity";
 
 const profileSchema = z.object({
   full_name: z.string().trim().max(120, "Le nom ne doit pas dépasser 120 caractères."),
@@ -80,6 +81,7 @@ export function ProfileForm({
         default_neighborhood_id: values.default_city_id ? values.default_neighborhood_id || null : null,
       }).eq("id", userId);
       if (error) throw error;
+      void recordCustomerActivity({ type: "profil", source_event_id: crypto.randomUUID() });
       setUserDisplayName(values.full_name.trim());
       setMessageType("success");
       setMessage("Votre profil a été enregistré.");
@@ -97,6 +99,7 @@ export function ProfileForm({
     setSigningOut(true);
     setMessage("");
     try {
+      void recordCustomerActivity({ type: "deconnexion", source_event_id: crypto.randomUUID() });
       const { error } = await createClient().auth.signOut();
       if (error) throw error;
       router.push("/");

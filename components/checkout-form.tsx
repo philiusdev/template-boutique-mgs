@@ -15,6 +15,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { formatCfa, type City, type Neighborhood, type PaymentMethod, type TransportCompany } from "@/lib/types";
 import { isValidBurkinaPhoneNumber, toBurkinaPhoneNumber, toBurkinaPhoneHref, toSavedBurkinaPhoneNumber } from "@/lib/phone";
 import { BurkinaPhoneInput } from "@/components/burkina-phone-input";
+import { recordCustomerActivity } from "@/lib/customer-activity";
 
 const checkoutSchema = z.object({
   phone_number: z.string().refine(isValidBurkinaPhoneNumber, "Saisissez les 8 chiffres du numéro après +226."),
@@ -332,6 +333,11 @@ export function CheckoutForm() {
         if (error) throw error;
         if (!data) throw new Error("La commande n'a pas pu être créée. Réessayez.");
         orderId = data as string;
+        void recordCustomerActivity({
+          type: "commande",
+          source_event_id: crypto.randomUUID(),
+          order_id: orderId,
+        });
         setPendingOrderId(orderId);
         const { data: orderSummary, error: orderError } = await supabase
           .from("orders").select("subtotal,delivery_fee,total")
@@ -353,6 +359,11 @@ export function CheckoutForm() {
       });
       if (orderContactError) throw new Error("Le numéro n'a pas pu être associé à la commande. Réessayez.");
       await uploadProof(orderId, values, authData.user.id);
+      void recordCustomerActivity({
+        type: "preuve_paiement",
+        source_event_id: crypto.randomUUID(),
+        order_id: orderId,
+      });
       clearCart();
       router.push(`/mes-commandes?created=${orderId}`);
       router.refresh();

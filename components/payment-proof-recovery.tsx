@@ -7,6 +7,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createClient } from "@/lib/supabase/client";
 import type { PaymentMethod } from "@/lib/types";
+import { recordCustomerActivity } from "@/lib/customer-activity";
 
 const proofSchema = z.object({
   payment_method_id: z.string().uuid("Choisissez un moyen de paiement."),
@@ -67,6 +68,11 @@ export function PaymentProofRecovery({ orderId, userId, wasRejected = false }: {
         p_payment_method_id: method.id,
       });
       if (error) throw new Error("Capture envoyée, mais non enregistrée. Réessayez.");
+      void recordCustomerActivity({
+        type: "preuve_paiement",
+        source_event_id: crypto.randomUUID(),
+        order_id: orderId,
+      });
       setMessage("Votre preuve de paiement a été envoyée. Elle sera vérifiée par la boutique.");
       router.refresh();
     } catch (error) {

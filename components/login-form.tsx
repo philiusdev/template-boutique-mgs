@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { useStore } from "@/components/store-provider";
 import { safeInternalPath } from "@/lib/safe-internal-path";
+import { recordCustomerActivity } from "@/lib/customer-activity";
 
 const emailSchema = z.object({ email: z.string().trim().email("Entrez une adresse email valide.") });
 const codeSchema = z.object({ code: z.string().trim().regex(/^\d{6}$/, "Le code doit contenir 6 chiffres.") });
@@ -110,6 +111,7 @@ export function LoginForm({ destination, authError }: { destination: string; aut
       const { data: authData, error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
       if (error) throw error;
       if (!authData.user) throw new Error("La session n'a pas pu être créée. Demandez un nouveau code.");
+      void recordCustomerActivity({ type: "connexion", source_event_id: crypto.randomUUID() });
       const { data: profile } = await supabase
         .from("profiles")
         .select("role")
