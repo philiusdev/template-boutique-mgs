@@ -23,6 +23,9 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError) {
+    if (authError.name === "AuthSessionMissingError" || authError.status === 401) {
+      return NextResponse.json({ error: "Connexion requise." }, { status: 401 });
+    }
     console.error("[activite-client] Session illisible.", authError.message);
     return NextResponse.json({ error: "Session momentanément indisponible." }, { status: 503 });
   }
