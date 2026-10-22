@@ -97,7 +97,7 @@ export default async function AdminPage() {
         requesterEmail={email}
         routeRevalidation="/api/agency/revalidate"
         cheminRevalidation="/admin"
-        libelleBouton="Mon agence"
+        libelleBouton="Nous contacter"
       />
     </>
   );

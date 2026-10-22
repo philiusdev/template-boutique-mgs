@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -25,8 +25,12 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
 
 export function LoginForm({ destination, authError }: { destination: string; authError?: string }) {
   const router = useRouter();
-  const { demoMode, loginDemo } = useStore();
+  const { demoMode, demoReady, demoSession, loginDemo } = useStore();
   const safeDestination = safeInternalPath(destination);
+  useEffect(() => {
+    if (!demoMode || !demoReady || !demoSession) return;
+    router.replace(demoSession.role === "admin" && safeDestination === "/mes-commandes" ? "/admin" : safeDestination);
+  }, [demoMode, demoReady, demoSession, router, safeDestination]);
   const [step, setStep] = useState<"email" | "code">("email");
   const [delivery, setDelivery] = useState<"otp" | "magic_link">("otp");
   const [email, setEmail] = useState("");
@@ -34,6 +38,16 @@ export function LoginForm({ destination, authError }: { destination: string; aut
   const [submitting, setSubmitting] = useState(false);
   const emailForm = useForm<EmailValues>({ resolver: zodResolver(emailSchema), defaultValues: { email: "" } });
   const codeForm = useForm<CodeValues>({ resolver: zodResolver(codeSchema), defaultValues: { code: "" } });
+
+  if (demoMode && (!demoReady || demoSession)) {
+    return (
+      <main className="auth-page">
+        <section className="auth-card" aria-live="polite">
+          <p>{demoReady ? "Vous êtes déjà connectée. Redirection vers votre espace…" : "Vérification de votre session…"}</p>
+        </section>
+      </main>
+    );
+  }
 
   const requestCode = async ({ email: submittedEmail }: EmailValues) => {
     setMessage("");
