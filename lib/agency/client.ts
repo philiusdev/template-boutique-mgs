@@ -401,7 +401,7 @@ export async function callAgency<T>(path: string, init?: RequestInit): Promise<T
 
 /** Résultat d'un appel dont on a besoin de distinguer « refusé » de « absent ». */
 export type ReponsePlateforme<T> =
-  | { ok: true; valeur: T }
+  | { ok: true; valeur: T | null }
   | { ok: false; statut: number; corps: unknown; disponible: boolean };
 
 /**
@@ -480,14 +480,21 @@ export async function callAgenceAvecDetail<T>(
   }
 }
 
+/** Vrai si les variables d'environnement du connecteur sont présentes. */
+export function connecteurAgenceConfigure(): boolean {
+  return Boolean(
+    process.env.MGS_PLATFORM_URL?.trim() &&
+      process.env.MGS_SITE_KEY?.trim() &&
+      process.env.MGS_SITE_SECRET?.trim(),
+  );
+}
+
 /**
  * Retourne toutes les métriques de connexion, pour le diagnostic et
  * l'affichage du statut de santé du connecteur.
  */
 export function getMetriquesConnexion(): MetriqueConnexion[] {
   return Array.from(metriques.values());
-}
-
 }
 
 /* ========================================================================== *

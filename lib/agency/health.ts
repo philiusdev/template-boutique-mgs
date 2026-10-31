@@ -32,7 +32,7 @@ export function construireDiagnostic(): DiagnosticConnexion {
   const chemins = metriques.map((m) => {
     let statut: "ok" | "degrade" | "panne" = "ok";
     if (m.enCircuitOuvert) statut = "panne";
-    else if (m.totalAppels > 0 && m.tauxReussite < 70) statut = "degrade";
+    else if (m.totalAppels > 0 && (m.totalSucces / m.totalAppels) * 100 < 70) statut = "degrade";
     else if (m.dernierEchec && maintenant - m.dernierEchec < 60_000) statut = "degrade";
 
     return {

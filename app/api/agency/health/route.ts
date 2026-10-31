@@ -56,7 +56,9 @@ export async function GET() {
       totalAppels: m.totalAppels,
       totalSucces: m.totalSucces,
       totalEchecs: m.totalEchecs,
-      tauxReussite: m.totalAppels === 0 ? 100 : Math.round((m.totalSucces / m.totalAppels) * 100),
+      tauxReussite: m.totalAppels === 0
+        ? 100
+        : Math.round((m.totalSucces / m.totalAppels) * 100),
       tempsMoyenMs: m.tempsMoyenMs,
       dernierAppel: m.dernierAppel ?? null,
       dernierSucces: m.dernierSucces ?? null,
